@@ -5,18 +5,28 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  AnalyzeVideoBody,
+  ApiError,
+  CachedAnalysisResponse,
+  EventStats,
+  HealthStatus,
+  VideoAnalysis,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -92,6 +102,245 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Uses Gemini AI to extract events, timestamps, and highlights from a YouTube video
+ * @summary Analyze a track & field video
+ */
+export const getAnalyzeVideoUrl = () => {
+  return `/api/highlights/analyze`;
+};
+
+export const analyzeVideo = async (
+  analyzeVideoBody: AnalyzeVideoBody,
+  options?: RequestInit,
+): Promise<VideoAnalysis> => {
+  return customFetch<VideoAnalysis>(getAnalyzeVideoUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(analyzeVideoBody),
+  });
+};
+
+export const getAnalyzeVideoMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzeVideo>>,
+    TError,
+    { data: BodyType<AnalyzeVideoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof analyzeVideo>>,
+  TError,
+  { data: BodyType<AnalyzeVideoBody> },
+  TContext
+> => {
+  const mutationKey = ["analyzeVideo"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof analyzeVideo>>,
+    { data: BodyType<AnalyzeVideoBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return analyzeVideo(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AnalyzeVideoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof analyzeVideo>>
+>;
+export type AnalyzeVideoMutationBody = BodyType<AnalyzeVideoBody>;
+export type AnalyzeVideoMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Analyze a track & field video
+ */
+export const useAnalyzeVideo = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzeVideo>>,
+    TError,
+    { data: BodyType<AnalyzeVideoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof analyzeVideo>>,
+  TError,
+  { data: BodyType<AnalyzeVideoBody> },
+  TContext
+> => {
+  return useMutation(getAnalyzeVideoMutationOptions(options));
+};
+
+/**
+ * Returns the most recently analyzed video highlights from the DB cache
+ * @summary Get the last cached video analysis
+ */
+export const getGetCachedAnalysisUrl = () => {
+  return `/api/highlights/cached`;
+};
+
+export const getCachedAnalysis = async (
+  options?: RequestInit,
+): Promise<CachedAnalysisResponse> => {
+  return customFetch<CachedAnalysisResponse>(getGetCachedAnalysisUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCachedAnalysisQueryKey = () => {
+  return [`/api/highlights/cached`] as const;
+};
+
+export const getGetCachedAnalysisQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCachedAnalysis>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCachedAnalysis>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCachedAnalysisQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCachedAnalysis>>
+  > = ({ signal }) => getCachedAnalysis({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCachedAnalysis>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCachedAnalysisQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCachedAnalysis>>
+>;
+export type GetCachedAnalysisQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the last cached video analysis
+ */
+
+export function useGetCachedAnalysis<
+  TData = Awaited<ReturnType<typeof getCachedAnalysis>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCachedAnalysis>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCachedAnalysisQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns totals — total events, unique event types, total athletes detected, total races
+ * @summary Aggregate stats across all events in the cached analysis
+ */
+export const getGetEventStatsUrl = () => {
+  return `/api/highlights/stats`;
+};
+
+export const getEventStats = async (
+  options?: RequestInit,
+): Promise<EventStats> => {
+  return customFetch<EventStats>(getGetEventStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetEventStatsQueryKey = () => {
+  return [`/api/highlights/stats`] as const;
+};
+
+export const getGetEventStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEventStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getEventStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEventStatsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEventStats>>> = ({
+    signal,
+  }) => getEventStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEventStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetEventStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEventStats>>
+>;
+export type GetEventStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Aggregate stats across all events in the cached analysis
+ */
+
+export function useGetEventStats<
+  TData = Awaited<ReturnType<typeof getEventStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getEventStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEventStatsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

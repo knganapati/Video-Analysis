@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Track & Field Highlights Analyzer"
+version = "1.0.0"
+id = "artifacts/highlights"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21073
+
+[services.development]
+run = "pnpm --filter @workspace/highlights run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/highlights", "run", "build" ]
+publicDir = "artifacts/highlights/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21073"
+BASE_PATH = "/"

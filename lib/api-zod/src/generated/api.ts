@@ -14,3 +14,278 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Uses Gemini AI to extract events, timestamps, and highlights from a YouTube video
+ * @summary Analyze a track & field video
+ */
+export const AnalyzeVideoBody = zod.object({
+  videoUrl: zod.string().describe("YouTube video URL to analyze"),
+  videoTitle: zod
+    .string()
+    .optional()
+    .describe("Optional human-readable title for the video"),
+});
+
+export const analyzeVideoResponseEventsItemIntensityScoreMax = 10;
+
+export const AnalyzeVideoResponse = zod.object({
+  id: zod.string(),
+  videoUrl: zod.string(),
+  videoTitle: zod.string(),
+  analyzedAt: zod.coerce.date(),
+  totalDurationHours: zod
+    .number()
+    .optional()
+    .describe("Total video duration in hours"),
+  totalEvents: zod.number(),
+  totalAthletes: zod
+    .number()
+    .optional()
+    .describe("Estimated number of athletes"),
+  totalRaces: zod.number().optional(),
+  events: zod.array(
+    zod.object({
+      id: zod.string(),
+      eventName: zod.string().describe("e.g. 100m Men, Long Jump Women"),
+      category: zod.enum([
+        "sprint",
+        "middle_distance",
+        "long_distance",
+        "hurdles",
+        "relay",
+        "jump",
+        "throw",
+        "walk",
+        "combined",
+      ]),
+      gender: zod.enum(["men", "women", "mixed"]),
+      startTimestamp: zod.string().describe("HH:MM:SS timestamp in video"),
+      endTimestamp: zod
+        .string()
+        .optional()
+        .describe("HH:MM:SS timestamp in video"),
+      athletes: zod
+        .array(
+          zod.object({
+            rank: zod.number(),
+            name: zod.string(),
+            result: zod.string().describe("Time or distance achieved"),
+            notes: zod.string().optional(),
+          }),
+        )
+        .optional(),
+      highlightMoment: zod
+        .string()
+        .describe("Most exciting moment caption for this event"),
+      intensityScore: zod
+        .number()
+        .min(1)
+        .max(analyzeVideoResponseEventsItemIntensityScoreMax)
+        .describe("Excitement\/intensity rating from 1-10"),
+      winningResult: zod
+        .string()
+        .optional()
+        .describe("The winning time\/distance"),
+      notes: zod.string().optional(),
+    }),
+  ),
+  highlights: zod.array(
+    zod.object({
+      timestamp: zod.string().describe("HH:MM:SS timestamp"),
+      caption: zod.string().describe("Short energetic caption for this moment"),
+      eventName: zod.string(),
+      type: zod.enum([
+        "race_start",
+        "finish_line",
+        "field_attempt",
+        "winner_reaction",
+        "crowd_reaction",
+        "record_broken",
+        "photo_finish",
+      ]),
+      reelPosition: zod
+        .number()
+        .describe("Suggested order in the highlight reel (1 = first)"),
+    }),
+  ),
+  reelStructure: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.enum([
+        "hook",
+        "track_events",
+        "field_events",
+        "climax",
+        "ending",
+      ]),
+      description: zod.string(),
+      timestamps: zod.array(zod.string()),
+      durationSeconds: zod.number(),
+    }),
+  ),
+  analysisSummary: zod
+    .string()
+    .describe("One paragraph AI-generated narrative of the meet"),
+  selectionRationale: zod.string().describe("Why these moments were selected"),
+});
+
+/**
+ * Returns the most recently analyzed video highlights from the DB cache
+ * @summary Get the last cached video analysis
+ */
+export const getCachedAnalysisResponseAnalysisOneEventsItemIntensityScoreMax = 10;
+
+export const GetCachedAnalysisResponse = zod.object({
+  analysis: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        videoUrl: zod.string(),
+        videoTitle: zod.string(),
+        analyzedAt: zod.coerce.date(),
+        totalDurationHours: zod
+          .number()
+          .optional()
+          .describe("Total video duration in hours"),
+        totalEvents: zod.number(),
+        totalAthletes: zod
+          .number()
+          .optional()
+          .describe("Estimated number of athletes"),
+        totalRaces: zod.number().optional(),
+        events: zod.array(
+          zod.object({
+            id: zod.string(),
+            eventName: zod.string().describe("e.g. 100m Men, Long Jump Women"),
+            category: zod.enum([
+              "sprint",
+              "middle_distance",
+              "long_distance",
+              "hurdles",
+              "relay",
+              "jump",
+              "throw",
+              "walk",
+              "combined",
+            ]),
+            gender: zod.enum(["men", "women", "mixed"]),
+            startTimestamp: zod
+              .string()
+              .describe("HH:MM:SS timestamp in video"),
+            endTimestamp: zod
+              .string()
+              .optional()
+              .describe("HH:MM:SS timestamp in video"),
+            athletes: zod
+              .array(
+                zod.object({
+                  rank: zod.number(),
+                  name: zod.string(),
+                  result: zod.string().describe("Time or distance achieved"),
+                  notes: zod.string().optional(),
+                }),
+              )
+              .optional(),
+            highlightMoment: zod
+              .string()
+              .describe("Most exciting moment caption for this event"),
+            intensityScore: zod
+              .number()
+              .min(1)
+              .max(
+                getCachedAnalysisResponseAnalysisOneEventsItemIntensityScoreMax,
+              )
+              .describe("Excitement\/intensity rating from 1-10"),
+            winningResult: zod
+              .string()
+              .optional()
+              .describe("The winning time\/distance"),
+            notes: zod.string().optional(),
+          }),
+        ),
+        highlights: zod.array(
+          zod.object({
+            timestamp: zod.string().describe("HH:MM:SS timestamp"),
+            caption: zod
+              .string()
+              .describe("Short energetic caption for this moment"),
+            eventName: zod.string(),
+            type: zod.enum([
+              "race_start",
+              "finish_line",
+              "field_attempt",
+              "winner_reaction",
+              "crowd_reaction",
+              "record_broken",
+              "photo_finish",
+            ]),
+            reelPosition: zod
+              .number()
+              .describe("Suggested order in the highlight reel (1 = first)"),
+          }),
+        ),
+        reelStructure: zod.array(
+          zod.object({
+            order: zod.number(),
+            label: zod.enum([
+              "hook",
+              "track_events",
+              "field_events",
+              "climax",
+              "ending",
+            ]),
+            description: zod.string(),
+            timestamps: zod.array(zod.string()),
+            durationSeconds: zod.number(),
+          }),
+        ),
+        analysisSummary: zod
+          .string()
+          .describe("One paragraph AI-generated narrative of the meet"),
+        selectionRationale: zod
+          .string()
+          .describe("Why these moments were selected"),
+      }),
+      zod.null(),
+    ])
+    .nullable(),
+});
+
+/**
+ * Returns totals — total events, unique event types, total athletes detected, total races
+ * @summary Aggregate stats across all events in the cached analysis
+ */
+export const GetEventStatsResponse = zod.object({
+  totalEvents: zod.number(),
+  totalRaces: zod.number(),
+  totalFieldEvents: zod.number(),
+  totalAthletes: zod.number(),
+  eventBreakdown: zod.array(
+    zod.object({
+      category: zod.string(),
+      count: zod.number(),
+      avgIntensity: zod.number(),
+    }),
+  ),
+  topMoments: zod.array(
+    zod.object({
+      timestamp: zod.string().describe("HH:MM:SS timestamp"),
+      caption: zod.string().describe("Short energetic caption for this moment"),
+      eventName: zod.string(),
+      type: zod.enum([
+        "race_start",
+        "finish_line",
+        "field_attempt",
+        "winner_reaction",
+        "crowd_reaction",
+        "record_broken",
+        "photo_finish",
+      ]),
+      reelPosition: zod
+        .number()
+        .describe("Suggested order in the highlight reel (1 = first)"),
+    }),
+  ),
+  videoTitle: zod.string().optional(),
+});

@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: highlights
+    description: Track & field video highlight analysis
 paths:
   /healthz:
     get:
@@ -24,6 +26,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /highlights/analyze:
+    post:
+      operationId: analyzeVideo
+      tags: [highlights]
+      summary: Analyze a track & field video
+      description: Uses Gemini AI to extract events, timestamps, and highlights from a YouTube video
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeVideoBody"
+      responses:
+        "200":
+          description: Analysis complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoAnalysis"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Analysis failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /highlights/cached:
+    get:
+      operationId: getCachedAnalysis
+      tags: [highlights]
+      summary: Get the last cached video analysis
+      description: Returns the most recently analyzed video highlights from the DB cache
+      responses:
+        "200":
+          description: Cached analysis (null if none)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CachedAnalysisResponse"
+
+  /highlights/stats:
+    get:
+      operationId: getEventStats
+      tags: [highlights]
+      summary: Aggregate stats across all events in the cached analysis
+      description: Returns totals — total events, unique event types, total athletes detected, total races
+      responses:
+        "200":
+          description: Aggregate stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +97,235 @@ components:
       required:
         - status
 
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    AnalyzeVideoBody:
+      type: object
+      properties:
+        videoUrl:
+          type: string
+          description: YouTube video URL to analyze
+        videoTitle:
+          type: string
+          description: Optional human-readable title for the video
+      required:
+        - videoUrl
+
+    AthleteResult:
+      type: object
+      properties:
+        rank:
+          type: integer
+        name:
+          type: string
+        result:
+          type: string
+          description: Time or distance achieved
+        notes:
+          type: string
+      required:
+        - rank
+        - name
+        - result
+
+    TrackEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        eventName:
+          type: string
+          description: e.g. 100m Men, Long Jump Women
+        category:
+          type: string
+          enum: [sprint, middle_distance, long_distance, hurdles, relay, jump, throw, walk, combined]
+        gender:
+          type: string
+          enum: [men, women, mixed]
+        startTimestamp:
+          type: string
+          description: HH:MM:SS timestamp in video
+        endTimestamp:
+          type: string
+          description: HH:MM:SS timestamp in video
+        athletes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AthleteResult"
+        highlightMoment:
+          type: string
+          description: Most exciting moment caption for this event
+        intensityScore:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Excitement/intensity rating from 1-10
+        winningResult:
+          type: string
+          description: The winning time/distance
+        notes:
+          type: string
+      required:
+        - id
+        - eventName
+        - category
+        - gender
+        - startTimestamp
+        - highlightMoment
+        - intensityScore
+
+    HighlightMoment:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: HH:MM:SS timestamp
+        caption:
+          type: string
+          description: Short energetic caption for this moment
+        eventName:
+          type: string
+        type:
+          type: string
+          enum: [race_start, finish_line, field_attempt, winner_reaction, crowd_reaction, record_broken, photo_finish]
+        reelPosition:
+          type: integer
+          description: Suggested order in the highlight reel (1 = first)
+      required:
+        - timestamp
+        - caption
+        - eventName
+        - type
+        - reelPosition
+
+    ReelSegment:
+      type: object
+      properties:
+        order:
+          type: integer
+        label:
+          type: string
+          enum: [hook, track_events, field_events, climax, ending]
+        description:
+          type: string
+        timestamps:
+          type: array
+          items:
+            type: string
+        durationSeconds:
+          type: integer
+      required:
+        - order
+        - label
+        - description
+        - timestamps
+        - durationSeconds
+
+    VideoAnalysis:
+      type: object
+      properties:
+        id:
+          type: string
+        videoUrl:
+          type: string
+        videoTitle:
+          type: string
+        analyzedAt:
+          type: string
+          format: date-time
+        totalDurationHours:
+          type: number
+          description: Total video duration in hours
+        totalEvents:
+          type: integer
+        totalAthletes:
+          type: integer
+          description: Estimated number of athletes
+        totalRaces:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackEvent"
+        highlights:
+          type: array
+          items:
+            $ref: "#/components/schemas/HighlightMoment"
+        reelStructure:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReelSegment"
+        analysisSummary:
+          type: string
+          description: One paragraph AI-generated narrative of the meet
+        selectionRationale:
+          type: string
+          description: Why these moments were selected
+      required:
+        - id
+        - videoUrl
+        - videoTitle
+        - analyzedAt
+        - totalEvents
+        - events
+        - highlights
+        - reelStructure
+        - analysisSummary
+        - selectionRationale
+
+    CachedAnalysisResponse:
+      type: object
+      properties:
+        analysis:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/VideoAnalysis"
+            - type: "null"
+      required:
+        - analysis
+
+    EventStats:
+      type: object
+      properties:
+        totalEvents:
+          type: integer
+        totalRaces:
+          type: integer
+        totalFieldEvents:
+          type: integer
+        totalAthletes:
+          type: integer
+        eventBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              count:
+                type: integer
+              avgIntensity:
+                type: number
+            required:
+              - category
+              - count
+              - avgIntensity
+        topMoments:
+          type: array
+          items:
+            $ref: "#/components/schemas/HighlightMoment"
+        videoTitle:
+          type: string
+      required:
+        - totalEvents
+        - totalRaces
+        - totalFieldEvents
+        - totalAthletes
+        - eventBreakdown
+        - topMoments

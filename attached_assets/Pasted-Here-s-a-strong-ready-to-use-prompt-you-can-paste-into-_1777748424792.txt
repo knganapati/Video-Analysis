@@ -1,0 +1,78 @@
+Here’s a **strong, ready-to-use prompt** you can paste into ChatGPT / Gemini / Claude to get your assignment done quickly 👇
+
+---
+
+You are an expert sports video analyst.
+
+Analyze the following long-form track & field video and convert it into a short-form highlights reel.
+
+Video link:
+[https://www.youtube.com/live/PRem1_S56W8](https://www.youtube.com/live/PRem1_S56W8)
+
+Your task:
+
+1. Identify key athletic events (e.g., sprint races, final finishes, long jump, javelin throw, crowd reactions, winner moments).
+2. Extract important timestamps where high-action or significant events occur.
+3. Select only the most impactful and engaging moments (avoid unnecessary or low-action segments).
+
+Output format:
+
+1. Key Timestamps:
+
+* Provide 8–12 important timestamps
+* Include a short description of what happens at each timestamp
+
+2. Highlight Captions:
+
+* Write short, engaging captions for each selected moment
+* Use energetic and sports-style language (e.g., “Explosive sprint finish”, “Massive jump landing”)
+
+3. Reel Structure:
+
+* Organize the highlights into a short video flow:
+
+  * Hook (attention-grabbing start)
+  * Sequence of events (track + field mix)
+  * Ending (winner or crowd reaction)
+* Keep it suitable for a 20–30 second reel
+
+4. Brief Explanation:
+
+* Explain why these moments were selected (focus on motion intensity, crowd reaction, and key athletic actions)
+
+Constraints:
+
+* Focus on storytelling and highlight value, not full match details
+* Keep output concise and structured
+* Assume the viewer wants a fast, exciting summary
+
+If transcript is available, use it. Otherwise, infer events based on typical athletics competition flow.
+
+---
+
+# ⚡ How to use this
+
+1. Paste into ChatGPT
+2. If it doesn’t access video → paste transcript also
+3. Done → you’ll get:
+
+   * timestamps
+   * captions
+   * reel flow
+
+---
+
+# 🔥 Pro Tip
+
+If output is weak, add this line:
+
+```text
+Focus on high-motion moments such as sprint finishes, jumps, throws, and crowd reactions.
+```
+
+---
+
+If you want, I can also:
+
+* Generate **final submission document for you**
+* Or give **actual timestamps directly (faster)**

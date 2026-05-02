@@ -8,3 +8,153 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface ApiError {
+  error: string;
+}
+
+export interface AnalyzeVideoBody {
+  /** YouTube video URL to analyze */
+  videoUrl: string;
+  /** Optional human-readable title for the video */
+  videoTitle?: string;
+}
+
+export interface AthleteResult {
+  rank: number;
+  name: string;
+  /** Time or distance achieved */
+  result: string;
+  notes?: string;
+}
+
+export type TrackEventCategory =
+  (typeof TrackEventCategory)[keyof typeof TrackEventCategory];
+
+export const TrackEventCategory = {
+  sprint: "sprint",
+  middle_distance: "middle_distance",
+  long_distance: "long_distance",
+  hurdles: "hurdles",
+  relay: "relay",
+  jump: "jump",
+  throw: "throw",
+  walk: "walk",
+  combined: "combined",
+} as const;
+
+export type TrackEventGender =
+  (typeof TrackEventGender)[keyof typeof TrackEventGender];
+
+export const TrackEventGender = {
+  men: "men",
+  women: "women",
+  mixed: "mixed",
+} as const;
+
+export interface TrackEvent {
+  id: string;
+  /** e.g. 100m Men, Long Jump Women */
+  eventName: string;
+  category: TrackEventCategory;
+  gender: TrackEventGender;
+  /** HH:MM:SS timestamp in video */
+  startTimestamp: string;
+  /** HH:MM:SS timestamp in video */
+  endTimestamp?: string;
+  athletes?: AthleteResult[];
+  /** Most exciting moment caption for this event */
+  highlightMoment: string;
+  /**
+   * Excitement/intensity rating from 1-10
+   * @minimum 1
+   * @maximum 10
+   */
+  intensityScore: number;
+  /** The winning time/distance */
+  winningResult?: string;
+  notes?: string;
+}
+
+export type HighlightMomentType =
+  (typeof HighlightMomentType)[keyof typeof HighlightMomentType];
+
+export const HighlightMomentType = {
+  race_start: "race_start",
+  finish_line: "finish_line",
+  field_attempt: "field_attempt",
+  winner_reaction: "winner_reaction",
+  crowd_reaction: "crowd_reaction",
+  record_broken: "record_broken",
+  photo_finish: "photo_finish",
+} as const;
+
+export interface HighlightMoment {
+  /** HH:MM:SS timestamp */
+  timestamp: string;
+  /** Short energetic caption for this moment */
+  caption: string;
+  eventName: string;
+  type: HighlightMomentType;
+  /** Suggested order in the highlight reel (1 = first) */
+  reelPosition: number;
+}
+
+export type ReelSegmentLabel =
+  (typeof ReelSegmentLabel)[keyof typeof ReelSegmentLabel];
+
+export const ReelSegmentLabel = {
+  hook: "hook",
+  track_events: "track_events",
+  field_events: "field_events",
+  climax: "climax",
+  ending: "ending",
+} as const;
+
+export interface ReelSegment {
+  order: number;
+  label: ReelSegmentLabel;
+  description: string;
+  timestamps: string[];
+  durationSeconds: number;
+}
+
+export interface VideoAnalysis {
+  id: string;
+  videoUrl: string;
+  videoTitle: string;
+  analyzedAt: string;
+  /** Total video duration in hours */
+  totalDurationHours?: number;
+  totalEvents: number;
+  /** Estimated number of athletes */
+  totalAthletes?: number;
+  totalRaces?: number;
+  events: TrackEvent[];
+  highlights: HighlightMoment[];
+  reelStructure: ReelSegment[];
+  /** One paragraph AI-generated narrative of the meet */
+  analysisSummary: string;
+  /** Why these moments were selected */
+  selectionRationale: string;
+}
+
+export interface CachedAnalysisResponse {
+  analysis: VideoAnalysis | null;
+}
+
+export type EventStatsEventBreakdownItem = {
+  category: string;
+  count: number;
+  avgIntensity: number;
+};
+
+export interface EventStats {
+  totalEvents: number;
+  totalRaces: number;
+  totalFieldEvents: number;
+  totalAthletes: number;
+  eventBreakdown: EventStatsEventBreakdownItem[];
+  topMoments: HighlightMoment[];
+  videoTitle?: string;
+}
