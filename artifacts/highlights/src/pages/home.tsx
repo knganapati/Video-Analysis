@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAnalyzeVideo,
@@ -16,7 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Activity, Play, Trophy, Users, Timer, Zap, Target,
-  Film, Clock, ChevronRight, Clapperboard, Video
+  Film, Clock, ChevronLeft, ChevronRight, Clapperboard,
+  SkipForward, SkipBack, ExternalLink
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -306,7 +307,26 @@ function EventsTab({
   );
 }
 
+/** Convert HH:MM:SS or MM:SS to total seconds */
+function tsToSeconds(ts: string): number {
+  const parts = ts.split(":").map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return 0;
+}
+
+/** Extract YouTube video ID from any standard URL format */
+function extractVideoId(url: string): string | null {
+  const m = url.match(/(?:v=|live\/|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m?.[1] ?? null;
+}
+
 function ReelTab({ analysis }: { analysis: VideoAnalysis }) {
+  const clipsInOrder = useMemo(
+    () => [...analysis.highlights].sort((a, b) => a.reelPosition - b.reelPosition),
+    [analysis.highlights]
+  );
+
   const sortedSegments = useMemo(
     () => [...analysis.reelStructure].sort((a, b) => a.order - b.order),
     [analysis.reelStructure]
@@ -317,65 +337,82 @@ function ReelTab({ analysis }: { analysis: VideoAnalysis }) {
     [sortedSegments]
   );
 
-  const highlightsByTimestamp = useMemo(() => {
-    const map = new Map<string, HighlightMoment>();
-    for (const hl of analysis.highlights) map.set(hl.timestamp, hl);
-    return map;
-  }, [analysis.highlights]);
-
   const eventByName = useMemo(() => {
     const map = new Map<string, TrackEvent>();
     for (const ev of analysis.events) map.set(ev.eventName, ev);
     return map;
   }, [analysis.events]);
 
-  const clipsInOrder = useMemo(() =>
-    [...analysis.highlights].sort((a, b) => a.reelPosition - b.reelPosition),
-    [analysis.highlights]
-  );
+  const videoId = useMemo(() => extractVideoId(analysis.videoUrl), [analysis.videoUrl]);
+
+  const [activeIdx, setActiveIdx] = useState(0);
+  const queueRef = useRef<HTMLDivElement>(null);
+
+  const clip = clipsInOrder[activeIdx];
+  const linkedEvent = clip ? eventByName.get(clip.eventName) : undefined;
+  const segForClip = clip
+    ? sortedSegments.find(s => s.timestamps.includes(clip.timestamp))
+    : undefined;
+  const clipColors = segForClip
+    ? (SEGMENT_COLORS[segForClip.label] ?? SEGMENT_COLORS.hook)
+    : SEGMENT_COLORS.hook;
+
+  const startSecs = clip ? tsToSeconds(clip.timestamp) : 0;
+  // embed key forces iframe reload at new timestamp when clip changes
+  const embedKey = `${videoId}-${activeIdx}-${startSecs}`;
+
+  const embedUrl = videoId
+    ? `https://www.youtube.com/embed/${videoId}?start=${startSecs}&autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&color=white`
+    : null;
+
+  const goPrev = useCallback(() => setActiveIdx(i => Math.max(0, i - 1)), []);
+  const goNext = useCallback(() => setActiveIdx(i => Math.min(clipsInOrder.length - 1, i + 1)), [clipsInOrder.length]);
+
+  // Scroll active clip into view in the queue
+  useEffect(() => {
+    const el = queueRef.current?.querySelector(`[data-clipidx="${activeIdx}"]`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeIdx]);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
 
-      {/* Reel Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ── Header ──────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
             <Film className="h-5 w-5 text-primary" /> Highlight Reel
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {analysis.videoTitle} &mdash; {clipsInOrder.length} clips &mdash; {totalReelSeconds}s total
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {analysis.videoTitle} &mdash; {clipsInOrder.length} clips &mdash; {totalReelSeconds}s edited reel
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-xs font-mono text-muted-foreground uppercase bg-card border border-border px-3 py-1.5 rounded">
-            {sortedSegments.length} Segments
-          </div>
-          <div className="text-xs font-mono text-primary bg-primary/10 border border-primary/30 px-3 py-1.5 rounded font-bold">
-            {totalReelSeconds}s Reel
-          </div>
+        <div className="flex items-center gap-2 text-xs font-mono shrink-0">
+          <span className="bg-card border border-border px-3 py-1.5 rounded text-muted-foreground uppercase">
+            {sortedSegments.length} segments
+          </span>
+          <span className="bg-primary/10 border border-primary/30 px-3 py-1.5 rounded text-primary font-bold">
+            {totalReelSeconds}s reel
+          </span>
         </div>
       </div>
 
-      {/* Visual Timeline Bar */}
-      <div className="space-y-3">
-        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Timeline</div>
-        <div className="flex rounded-lg overflow-hidden border border-border h-10 shadow-inner">
+      {/* ── Timeline bar ────────────────────────────────── */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Reel Timeline</p>
+        <div className="flex h-8 rounded-lg overflow-hidden border border-border">
           {sortedSegments.map(seg => {
             const pct = totalReelSeconds > 0 ? (seg.durationSeconds / totalReelSeconds) * 100 : 20;
-            const colors = SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook;
+            const c = SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook;
+            const isActive = segForClip?.label === seg.label;
             return (
               <div
                 key={seg.label}
                 style={{ width: `${pct}%` }}
-                className={`${colors.bar} relative group flex items-center justify-center min-w-0 overflow-hidden cursor-default`}
-                title={`${seg.label.replace("_", " ")} — ${seg.durationSeconds}s`}
-                data-testid={`timeline-segment-${seg.label}`}
+                className={`${c.bar} relative flex items-center justify-center overflow-hidden transition-opacity ${isActive ? "opacity-100 ring-2 ring-white/40 ring-inset" : "opacity-60"}`}
+                title={`${seg.label.replace("_"," ")} — ${seg.durationSeconds}s`}
               >
-                <span className="text-[10px] font-bold uppercase text-white/90 truncate px-1 hidden group-hover:block">
-                  {seg.label.replace("_", " ")}
-                </span>
-                <span className="text-[10px] font-bold uppercase text-white/90 truncate px-1 group-hover:hidden">
+                <span className="text-[9px] font-bold uppercase text-white/90 truncate px-1">
                   {seg.durationSeconds}s
                 </span>
               </div>
@@ -385,15 +422,11 @@ function ReelTab({ analysis }: { analysis: VideoAnalysis }) {
         <div className="flex">
           {sortedSegments.map(seg => {
             const pct = totalReelSeconds > 0 ? (seg.durationSeconds / totalReelSeconds) * 100 : 20;
-            const colors = SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook;
+            const c = SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook;
             return (
-              <div
-                key={seg.label}
-                style={{ width: `${pct}%` }}
-                className="overflow-hidden"
-              >
-                <span className={`text-[9px] font-mono uppercase ${colors.text} truncate block`}>
-                  {seg.label.replace("_", " ")}
+              <div key={seg.label} style={{ width: `${pct}%` }} className="overflow-hidden">
+                <span className={`text-[9px] font-mono uppercase ${c.text} truncate block leading-tight`}>
+                  {seg.label.replace("_"," ")}
                 </span>
               </div>
             );
@@ -401,102 +434,216 @@ function ReelTab({ analysis }: { analysis: VideoAnalysis }) {
         </div>
       </div>
 
-      {/* Segment Cards */}
-      <div className="space-y-6">
-        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Storyboard</div>
-        {sortedSegments.map((seg, segIdx) => {
-          const colors = SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook;
-          const segmentClips = clipsInOrder.filter(hl => seg.timestamps.includes(hl.timestamp));
-          const extraTimestamps = seg.timestamps.filter(ts => !highlightsByTimestamp.has(ts));
+      {/* ── Main player + queue ─────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          return (
-            <div
-              key={seg.label}
-              className={`rounded-xl border ${colors.border} ${colors.bg} overflow-hidden`}
-              data-testid={`segment-card-${seg.label}`}
-            >
-              {/* Segment Header */}
-              <div className={`px-5 py-4 border-b ${colors.border} flex items-center justify-between`}>
-                <div className="flex items-center gap-3">
-                  <div className={`h-7 w-7 rounded-full ${colors.bar} flex items-center justify-center text-white font-bold text-sm shadow`}>
-                    {seg.order}
-                  </div>
-                  <div>
-                    <div className={`font-bold uppercase tracking-wider text-sm ${colors.text}`}>
-                      {seg.label.replace("_", " ")}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{seg.description}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Clock className={`h-3.5 w-3.5 ${colors.text}`} />
-                  <span className={`text-sm font-mono font-bold ${colors.text}`}>{seg.durationSeconds}s</span>
-                </div>
+        {/* Player column */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* Video iframe */}
+          <div className="relative w-full rounded-xl overflow-hidden border border-border shadow-2xl bg-black"
+               style={{ aspectRatio: "16/9" }}>
+            {embedUrl ? (
+              <iframe
+                key={embedKey}
+                src={embedUrl}
+                title={clip?.caption ?? "Highlight clip"}
+                className="absolute inset-0 w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <Film className="h-12 w-12 opacity-30" />
+                <p className="text-sm">No video ID found in stored URL</p>
               </div>
+            )}
 
-              {/* Clips in this segment */}
-              <div className="p-4 space-y-3">
-                {segmentClips.length > 0 ? (
-                  segmentClips.map((clip, clipIdx) => {
-                    const linkedEvent = eventByName.get(clip.eventName);
-                    return (
-                      <ClipRow
-                        key={clip.timestamp}
-                        clipIndex={segIdx * 10 + clipIdx + 1}
-                        clip={clip}
-                        event={linkedEvent}
-                        colors={colors}
-                      />
-                    );
-                  })
-                ) : null}
+            {/* Segment badge overlay */}
+            {segForClip && (
+              <div className={`absolute top-3 left-3 ${clipColors.bar} text-white text-[10px] font-bold uppercase px-2 py-1 rounded shadow-lg tracking-wider pointer-events-none`}>
+                {segForClip.label.replace("_"," ")}
+              </div>
+            )}
 
-                {/* Extra timestamps that didn't match a highlight moment */}
-                {extraTimestamps.map(ts => (
-                  <div key={ts} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-background/40 border border-border/40">
-                    <span className={`font-mono text-xs font-bold ${colors.text} bg-background/60 px-2 py-0.5 rounded border ${colors.border}`}>
-                      {ts}
-                    </span>
-                    <span className="text-xs text-muted-foreground italic">Transition / cutaway moment</span>
-                  </div>
-                ))}
+            {/* Clip counter overlay */}
+            <div className="absolute top-3 right-3 bg-black/70 text-white text-xs font-mono px-2 py-1 rounded pointer-events-none">
+              {activeIdx + 1} / {clipsInOrder.length}
+            </div>
+          </div>
 
-                {segmentClips.length === 0 && extraTimestamps.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic py-2">No clips assigned to this segment.</p>
+          {/* Clip info */}
+          {clip && (
+            <div className={`rounded-xl border ${clipColors.border} ${clipColors.bg} p-4 space-y-3`}>
+              <p className="font-bold text-base leading-snug text-foreground">{clip.caption}</p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`font-mono text-sm font-bold ${clipColors.text} bg-background/50 px-2 py-0.5 rounded border ${clipColors.border}`}>
+                  {clip.timestamp}
+                </span>
+                <Badge variant="outline" className="text-[10px] uppercase h-5 px-2">
+                  {MOMENT_TYPE_LABELS[clip.type] ?? clip.type}
+                </Badge>
+                <span className="text-sm text-muted-foreground">{clip.eventName}</span>
+                {linkedEvent?.winningResult && (
+                  <span className="font-mono font-bold text-foreground text-sm">{linkedEvent.winningResult}</span>
                 )}
               </div>
+
+              {linkedEvent && (
+                <div className="flex items-center gap-3 pt-1">
+                  <span className="text-[10px] font-mono text-muted-foreground uppercase">Intensity</span>
+                  <div className="flex gap-0.5 h-1.5 flex-1 max-w-[120px]">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <div key={i} className={`flex-1 rounded-sm ${
+                        i < linkedEvent.intensityScore
+                          ? i > 7 ? "bg-red-500" : i > 4 ? "bg-primary" : "bg-accent"
+                          : "bg-secondary"
+                      }`} />
+                    ))}
+                  </div>
+                  <span className="text-xs font-mono font-bold">{linkedEvent.intensityScore}/10</span>
+                </div>
+              )}
+
+              {linkedEvent?.athletes && linkedEvent.athletes.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t border-border/40">
+                  {linkedEvent.athletes.slice(0, 3).map(a => (
+                    <div key={a.rank} className="flex items-center gap-1.5 text-xs">
+                      <span className={`font-mono font-bold ${a.rank === 1 ? "text-yellow-400" : "text-muted-foreground"}`}>#{a.rank}</span>
+                      <span className="text-muted-foreground">{a.name}</span>
+                      <span className="font-mono font-bold text-foreground">{a.result}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          );
-        })}
+          )}
+
+          {/* Navigation controls */}
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="outline"
+              onClick={goPrev}
+              disabled={activeIdx === 0}
+              className="flex items-center gap-2 border-border"
+            >
+              <SkipBack className="h-4 w-4" /> Prev Clip
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {clipsInOrder.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveIdx(i)}
+                  className={`rounded-full transition-all ${
+                    i === activeIdx
+                      ? "w-4 h-2 bg-primary"
+                      : "w-2 h-2 bg-secondary hover:bg-muted-foreground"
+                  }`}
+                  aria-label={`Clip ${i + 1}`}
+                />
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={goNext}
+              disabled={activeIdx === clipsInOrder.length - 1}
+              className="flex items-center gap-2 border-border"
+            >
+              Next Clip <SkipForward className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Open in YouTube link */}
+          {videoId && clip && (
+            <a
+              href={`https://www.youtube.com/watch?v=${videoId}&t=${startSecs}s`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors font-mono"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open this moment in YouTube at {clip.timestamp}
+            </a>
+          )}
+        </div>
+
+        {/* Clip queue sidebar */}
+        <div className="space-y-3">
+          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+            Clip Queue — {clipsInOrder.length} cuts
+          </p>
+          <div
+            ref={queueRef}
+            className="space-y-2 max-h-[640px] overflow-y-auto pr-1 scrollbar-thin"
+          >
+            {clipsInOrder.map((c, i) => {
+              const seg = sortedSegments.find(s => s.timestamps.includes(c.timestamp));
+              const col = seg ? (SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook) : SEGMENT_COLORS.hook;
+              const isActive = i === activeIdx;
+              return (
+                <button
+                  key={c.timestamp}
+                  data-clipidx={i}
+                  onClick={() => setActiveIdx(i)}
+                  className={`w-full text-left rounded-lg border p-3 flex gap-3 items-start transition-all ${
+                    isActive
+                      ? `${col.border} ${col.bg} ring-1 ring-current`
+                      : "border-border bg-card hover:border-muted-foreground/40 hover:-translate-y-0.5"
+                  }`}
+                >
+                  <div className={`shrink-0 h-6 w-6 rounded text-white text-[10px] font-bold flex items-center justify-center ${col.bar} mt-0.5`}>
+                    {c.reelPosition}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-xs font-bold leading-snug line-clamp-2 ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                      {c.caption}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`font-mono text-[10px] font-bold ${col.text}`}>{c.timestamp}</span>
+                      {isActive && (
+                        <span className="flex items-center gap-1 text-[9px] text-primary font-mono uppercase">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse inline-block" />
+                          Playing
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground truncate">{c.eventName}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Full clip sequence */}
-      <div className="space-y-4">
-        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider border-b border-border pb-2">
-          Full Clip Sequence — {clipsInOrder.length} cuts
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {clipsInOrder.map((clip, i) => {
-            const segForClip = sortedSegments.find(s => s.timestamps.includes(clip.timestamp));
-            const colors = segForClip ? (SEGMENT_COLORS[segForClip.label] ?? SEGMENT_COLORS.hook) : SEGMENT_COLORS.hook;
+      {/* ── Storyboard segments ─────────────────────────── */}
+      <div className="space-y-4 pt-4 border-t border-border">
+        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Storyboard Structure</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {sortedSegments.map(seg => {
+            const c = SEGMENT_COLORS[seg.label] ?? SEGMENT_COLORS.hook;
+            const segClips = clipsInOrder.filter(hl => seg.timestamps.includes(hl.timestamp));
+            const isActiveSeg = segForClip?.label === seg.label;
             return (
               <div
-                key={clip.timestamp}
-                className={`rounded-lg border ${colors.border} bg-card p-3 flex gap-3 items-start hover:-translate-y-0.5 transition-transform`}
-                data-testid={`clip-card-${i}`}
+                key={seg.label}
+                className={`rounded-xl border ${c.border} ${c.bg} p-4 flex flex-col gap-2 transition-all ${isActiveSeg ? "ring-2 ring-current" : ""}`}
               >
-                <div className={`shrink-0 h-6 w-6 rounded text-white text-[10px] font-bold flex items-center justify-center ${colors.bar}`}>
-                  {clip.reelPosition}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-foreground leading-snug">{clip.caption}</p>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`font-mono text-[10px] font-bold ${colors.text}`}>{clip.timestamp}</span>
-                    <span className="text-[10px] text-muted-foreground">{clip.eventName}</span>
+                <div className="flex items-center gap-2">
+                  <div className={`h-6 w-6 rounded-full ${c.bar} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
+                    {seg.order}
                   </div>
-                  <Badge variant="outline" className={`text-[9px] uppercase mt-1 h-4 px-1 ${colors.text} border-current`}>
-                    {MOMENT_TYPE_LABELS[clip.type] ?? clip.type}
-                  </Badge>
+                  <span className={`font-bold uppercase text-xs tracking-wider ${c.text}`}>
+                    {seg.label.replace("_"," ")}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-snug">{seg.description}</p>
+                <div className="flex items-center justify-between mt-auto pt-2 border-t border-current/10">
+                  <span className="text-[10px] text-muted-foreground">{segClips.length} clip{segClips.length !== 1 ? "s" : ""}</span>
+                  <span className={`font-mono text-xs font-bold ${c.text}`}>{seg.durationSeconds}s</span>
                 </div>
               </div>
             );
