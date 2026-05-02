@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "8jhYOzRtV9eMaIGazbAAG"
+uri = "file://ARCHITECTURE.md"
+type = "text"
+title = "Architecture & Technical Documentation (2000+ words)"
