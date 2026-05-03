@@ -65,7 +65,7 @@ export default function Home() {
         queryClient.invalidateQueries({ queryKey: getGetEventStatsQueryKey() });
       },
       onError: (err: any) => {
-        toast({ title: "Analysis Failed", description: err?.error?.error || "Could not analyze video.", variant: "destructive" });
+        toast({ title: "Analysis Failed", description: err?.data?.error || err?.message || "Could not analyze video.", variant: "destructive" });
       },
     });
   };
