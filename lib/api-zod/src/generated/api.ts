@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+/* eslint-disable */
+// @ts-nocheck
 import * as zod from "zod";
 
 /**
