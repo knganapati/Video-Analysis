@@ -39,7 +39,7 @@ if (process.env.NODE_ENV === "production") {
   // Path from artifacts/api-server/dist/index.mjs to artifacts/highlights/dist/public
   const publicPath = path.resolve(__dirname, "../../highlights/dist/public");
   app.use(express.static(publicPath));
-  app.get("*", (req, res) => {
+  app.get("/(.*)", (req, res) => {
     res.sendFile(path.join(publicPath, "index.html"));
   });
 }
