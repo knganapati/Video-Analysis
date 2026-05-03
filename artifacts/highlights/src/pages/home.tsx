@@ -6,8 +6,12 @@ import {
   useGetEventStats,
   getGetCachedAnalysisQueryKey,
   getGetEventStatsQueryKey,
+  type TrackEvent,
+  type HighlightMoment,
+  type ReelSegment,
+  type VideoAnalysis,
+  type AthleteResult,
 } from "@workspace/api-client-react";
-import type { TrackEvent, HighlightMoment, ReelSegment, VideoAnalysis } from "@workspace/api-client-react/src/generated/api.schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -550,7 +554,7 @@ function ReelTab({ analysis }: { analysis: VideoAnalysis }) {
 
               {linkedEvent?.athletes && linkedEvent.athletes.length > 0 && (
                 <div className="flex flex-wrap gap-x-5 gap-y-1 pt-2 border-t border-border/40">
-                  {linkedEvent.athletes.slice(0, 3).map(a => (
+                  {linkedEvent.athletes.slice(0, 3).map((a: AthleteResult) => (
                     <div key={a.rank} className="flex items-center gap-1.5 text-xs">
                       <span className={`font-mono font-bold ${a.rank === 1 ? "text-yellow-400" : "text-muted-foreground"}`}>#{a.rank}</span>
                       <span className="text-muted-foreground">{a.name}</span>
@@ -863,7 +867,7 @@ function EventCard({ event }: { event: TrackEvent }) {
 
         {event.athletes && event.athletes.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border/50 space-y-1">
-            {event.athletes.slice(0, 3).map(a => (
+            {event.athletes.slice(0, 3).map((a: AthleteResult) => (
               <div key={a.rank} className="flex items-center gap-2 text-xs">
                 <span className={`font-mono font-bold w-4 ${a.rank === 1 ? "text-yellow-400" : "text-muted-foreground"}`}>
                   #{a.rank}
