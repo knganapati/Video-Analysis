@@ -39,7 +39,11 @@ if (process.env.NODE_ENV === "production") {
   // Path from artifacts/api-server/dist/index.mjs to artifacts/highlights/dist/public
   const publicPath = path.resolve(__dirname, "../../highlights/dist/public");
   app.use(express.static(publicPath));
-  app.get("/(.*)", (req, res) => {
+  // Catch-all: Serve index.html for any non-API routes (SPA routing)
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      return next();
+    }
     res.sendFile(path.join(publicPath, "index.html"));
   });
 }
