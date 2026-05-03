@@ -83,7 +83,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Activity className="h-6 w-6 text-primary" />
             <h1 className="font-bold text-lg tracking-tight uppercase">
-              T&F Analyzer<span className="text-primary">.pro</span>
+              Sports Data Analyzer
             </h1>
           </div>
           <div className="flex items-center gap-4 text-sm font-mono text-muted-foreground">
